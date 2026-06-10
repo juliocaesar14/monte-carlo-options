@@ -22,9 +22,11 @@ price_paths = S0 * np.exp(np.vstack([np.zeros(N), log_returns]))
 # Shape is now(steps+1, N)
 
 # check all now
-S_T = price_paths[-1, :]                           # terminal prices
+S_T = price_paths[-1, :]                          
+ # terminal prices
 print(f"Simulated mean S(T):    {S_T.mean():.2f}")
-print(f"Theoretical mean S(T):  {S0 * np.exp(mu * T):.2f}")  # should match!
+print(f"Theoretical mean S(T):  {S0 * np.exp(mu * T):.2f}") 
+ # should match!
 print(f"Simulated std S(T):     {S_T.std():.2f}")
 
 #all plots
