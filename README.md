@@ -5,3 +5,9 @@ This script simulates stock price paths using Geometric Brownian Motion (GBM) as
 # References
 - Black & Scholes (1973). The Pricing of Options and Corporate Liabilities.
 - Boyle (1977). Options: A Monte Carlo Approach.
+
+
+Phase 2:
+## European Option Pricing
+Prices a European call and put via risk-neutral Monte Carlo, benchmarked against
+the Black-Scholes closed form.
