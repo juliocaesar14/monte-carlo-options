@@ -11,3 +11,5 @@ Phase 2:
 ## European Option Pricing
 Prices a European call and put via risk-neutral Monte Carlo, benchmarked against
 the Black-Scholes closed form.
+
+//was still learning the mechanism for the model and how it could be applied to options
