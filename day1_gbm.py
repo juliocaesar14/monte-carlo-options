@@ -41,3 +41,4 @@ plt.tight_layout()
 plt.savefig('day1_paths.png', dpi=150)
 plt.show()
 
+

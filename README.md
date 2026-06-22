@@ -11,3 +11,11 @@ Phase 2:
 ## European Option Pricing
 Prices a European call and put via risk-neutral Monte Carlo, benchmarked against
 the Black-Scholes closed form.
+
+Phase 3:
+Greeks via Finite Difference
+Estimates Delta, Gamma, Vega, Theta, Rho using central finite differences.
+Each Greek bumps one input by a small h, measures price change, divides by 2h.
+Same Z array reused across all bumps (Common Random Numbers) to reduce noise.
+Validated against Black-Scholes analytical Greeks- all errors < 0.1.
+
