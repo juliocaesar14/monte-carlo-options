@@ -28,3 +28,14 @@ Compares three MC pricing methods at the same N:
 3) Control Variates: use known E[S_T] to correct noise, 6.9x variance reduction
 All three converge at 1/sqrt(N) but control variates starts much lower.
 
+
+Phase 5;
+Day 5 prices path-dependent options: an Asian call (payoff based on the average price along the path) and barrier options (up-and-out call, down-and-in put). Asian call price (5.79) is lower than the vanilla European call (10.48) because averaging the path reduces effective volatility — option value increases with volatility, so a lower effective vol means a cheaper option.
+
+
+Phase 6;
+Phase 6 recovers implied volatility from option prices using bisection. A synthetic smile is baked into a grid of strikes and expiries, priced with Black Scholes, then recovered from those prices to confirm the method works, with error close to zero. This synthetic smile is symmetric. 
+Phase 7 checks whether real market data shows a skew instead.
+
+
+
