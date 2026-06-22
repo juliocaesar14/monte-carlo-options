@@ -13,9 +13,18 @@ Prices a European call and put via risk-neutral Monte Carlo, benchmarked against
 the Black-Scholes closed form.
 
 Phase 3:
-Greeks via Finite Difference
+## Greeks via Finite Difference
 Estimates Delta, Gamma, Vega, Theta, Rho using central finite differences.
 Each Greek bumps one input by a small h, measures price change, divides by 2h.
 Same Z array reused across all bumps (Common Random Numbers) to reduce noise.
 Validated against Black-Scholes analytical Greeks- all errors < 0.1.
+
+
+Phase 4:
+## Variance redcution
+Compares three MC pricing methods at the same N:
+1) Plain MC: baseline
+2) Antithetic Variates: pair each Z with -Z, 2x variance reduction
+3) Control Variates: use known E[S_T] to correct noise, 6.9x variance reduction
+All three converge at 1/sqrt(N) but control variates starts much lower.
 
