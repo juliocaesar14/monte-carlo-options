@@ -1,10 +1,11 @@
+
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.stats import norm
- 
-S0 = 476.0   # realistic SPY spot
-r  = 0.045
+
+S0 = 476.0   # illustrative SPY-like spot, NOT a live quote
+r  = 0.045   # illustrative risk-free rate, NOT a live quote
  
 def bs_price(S0, K, r, sigma, T, opt="call"):
     if T <= 0 or sigma <= 0:
@@ -65,8 +66,8 @@ axes = axes.flatten()
 colors = ["#1f77b4","#ff7f0e","#2ca02c","#d62728"]
  
 for i, (T, label, ax, c) in enumerate(zip(expiries, exp_labels, axes, colors)):
-    ax.plot(moneyness_grid, IV_surface[i]*100,   "o--", color=c, ms=4, lw=1.5, label="Market IV (yFinance)")
-    ax.plot(moneyness_grid, IV_recovered[i]*100, "s-",  color=c, ms=3, lw=2,   alpha=0.7, label="Bisection-recovered IV")
+    ax.plot(moneyness_grid, IV_surface[i]*100,   "o--", color=c, ms=4, lw=1.5, label="Synthetic 'true' smile (input)")
+    ax.plot(moneyness_grid, IV_recovered[i]*100, "s-",  color=c, ms=3, lw=2,   alpha=0.7, label="Bisection-recovered IV (output)")
     ax.axvline(1.0, color="grey", ls="--", alpha=0.5, label="ATM")
     ax.fill_between(moneyness_grid[moneyness_grid<1],
                     (IV_surface[i]*100)[moneyness_grid<1],
@@ -84,12 +85,12 @@ for i, (T, label, ax, c) in enumerate(zip(expiries, exp_labels, axes, colors)):
                 xytext=(0.82, 28), fontsize=6.5, color=c,
                 arrowprops=dict(arrowstyle="->", color=c, lw=0.8))
  
-fig.suptitle("SPY Implied Vol: Bisection Recovery vs Market IV\n(Synthetic SPY-calibrated data · put skew visible for K < S0)",
+fig.suptitle("Synthetic Vol Smile: Bisection Round-Trip Recovery Test\n(Hand-specified smile function — NOT real market data, see day7_market_data.py for that)",
              fontsize=12, fontweight="bold")
 plt.tight_layout()
-plt.savefig("spy_iv_overlay.png", dpi=150, bbox_inches="tight")
+plt.savefig("synthetic_iv_overlay.png", dpi=150, bbox_inches="tight")
 plt.close()
-print("[Saved] spy_iv_overlay.png")
+print("[Saved] synthetic_iv_overlay.png (synthetic data, see day7_market_data.py for real SPY data)")
  
 # 3D surface plot
 M_grid, T_grid = np.meshgrid(moneyness_grid, expiries)
@@ -108,12 +109,11 @@ for i, T in enumerate(expiries):
 ax3d.set_xlabel("Moneyness K/S0", labelpad=8, fontsize=10)
 ax3d.set_ylabel("Time to Expiry (yr)", labelpad=8, fontsize=10)
 ax3d.set_zlabel("Implied Vol (%)", labelpad=8, fontsize=10)
-ax3d.set_title("SPY Real Vol Surface — Put Skew Visible for K < S0\n"
-               "(IV rises for low strikes: crash-risk premium + dealer hedging demand)",
+ax3d.set_title("Synthetic Vol Surface — Put Skew by Construction\n"
+               "(Hand-specified smile function, NOT real market data)",
                fontsize=11, fontweight="bold")
 ax3d.view_init(elev=25, azim=-50)
 plt.tight_layout()
-plt.savefig("spy_vol_surface.png", dpi=150, bbox_inches="tight")
+plt.savefig("synthetic_vol_surface.png", dpi=150, bbox_inches="tight")
 plt.close()
-print("[Saved] spy_vol_surface.png")
-
+print("[Saved] synthetic_vol_surface.png (synthetic data, see day7_market_data.py for real SPY data)")

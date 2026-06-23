@@ -52,6 +52,19 @@ def get_spy_chain_iv(S0: float, r: float, T_target: float):
     chain["moneyness"] = chain["strike"] / S0
     chain["mid_price"] = (chain["bid"] + chain["ask"]) / 2
 
+    # Require a live, reasonably tight two-sided market. Falling back to
+    # lastPrice for quotes with no current bid/ask (or a very wide spread)
+    # is what produced jagged spikes in the recovered IV curve, since a
+    # stale lastPrice can sit far from the option's current fair value.
+    # Spread threshold loosened to 60% (from an initial 25%) since SPY
+    # near-term/far-OTM strikes can legitimately have wider quoted spreads
+    # even when liquid; 25% was dropping every contract.
+    n_before = len(chain)
+    has_quote   = (chain["bid"] > 0) & (chain["ask"] > 0)
+    tight_quote = has_quote & ((chain["ask"] - chain["bid"]) / chain["mid_price"] < 0.60)
+    chain = chain[tight_quote].copy()
+    print(f"Quote filter: {n_before} contracts -> {len(chain)} with live, reasonably tight two-sided markets.")
+
     print(f"Strikes surviving moneyness filter. {sorted(chain['strike'].tolist())}")
     print(f"Market, {len(chain)} OTM and near ATM put contracts available.")
 
@@ -63,38 +76,20 @@ def get_spy_chain_iv(S0: float, r: float, T_target: float):
     price_used    = []
 
     for _, row in chain.iterrows():
-        iv = None
-
-        if row["bid"] > 0 and row["ask"] > 0 and row["mid_price"] > 0:
-            iv = iv_bisection(row["mid_price"], S0, row["strike"], r, T_actual, option_type="put")
-            if iv is not None and IV_MIN < iv < IV_MAX:
-                derived_ivs.append(iv)
-                price_used.append(row["mid_price"])
-                continue
-
-        if row["lastPrice"] > 0:
-            iv = iv_bisection(row["lastPrice"], S0, row["strike"], r, T_actual, option_type="put")
-            if iv is not None and IV_MIN < iv < IV_MAX:
-                derived_ivs.append(iv)
-                price_used.append(row["lastPrice"])
-                continue
-
-        yf_iv = row["impliedVolatility"]
-        if IV_MIN < yf_iv < IV_MAX:
-            derived_ivs.append(yf_iv)
-            price_used.append(row["lastPrice"])
+        iv = iv_bisection(row["mid_price"], S0, row["strike"], r, T_actual, option_type="put")
+        if iv is not None and IV_MIN < iv < IV_MAX:
+            derived_ivs.append(iv)
+            price_used.append(row["mid_price"])
         else:
             derived_ivs.append(None)
-            price_used.append(row["lastPrice"])
+            price_used.append(row["mid_price"])
 
     chain["market_iv"]   = derived_ivs
     chain["price_used"]  = price_used
     chain = chain.dropna(subset=["market_iv"])
     chain = chain[(chain["market_iv"] > IV_MIN) & (chain["market_iv"] < IV_MAX)]
 
-    live = (chain["bid"] > 0).sum()
-    last = ((chain["bid"] == 0) & (chain["price_used"] > 0)).sum()
-    print(f"IV source breakdown. {live} from mid price, {last} from last traded price.")
+    print(f"Market IV recovered for {len(chain)} contracts from live mid-price quotes only.")
     print(f"Market IV range after filtering. {chain['market_iv'].min()*100:.1f}% to {chain['market_iv'].max()*100:.1f}%")
 
     return chain[["strike", "moneyness", "market_iv", "price_used", "impliedVolatility"]].reset_index(drop=True)
@@ -204,3 +199,6 @@ def run_comparison():
 
 if __name__ == "__main__":
     run_comparison()
+
+
+    

@@ -102,6 +102,7 @@ r = 0.045  # approximate risk-free rate (Fed funds)
 
  
 all_results = {}  # expiry -> cleaned DataFrame with recovered IV
+all_T = {}         # expiry -> T, stored separately so empty results don't crash lookups
  
 for exp in chosen_expiries:
     T = days_to_expiry(exp) / 365.0
@@ -115,18 +116,44 @@ for exp in chosen_expiries:
     print(f"   Puts raw rows: {len(puts)}, Calls raw rows: {len(calls)}")
  
     # ── Clean puts ──
+    # yfinance's volume and openInterest columns have both proven unreliable
+    # in practice (frequently 0/NaN even for genuinely liquid SPY contracts,
+    # likely a data-feed quirk rather than true illiquidity). Rather than
+    # filter on those, we keep any contract with a usable price (mid if a
+    # live bid/ask exists, else lastPrice) and a sane strike range, then
+    # rely on the rolling-median outlier filter below to remove any quotes
+    # that are actually stale/mispriced.
+    n0 = len(puts)
     puts = puts.dropna(subset=["lastPrice", "impliedVolatility"])
-    puts = puts[puts["volume"] > 10]                          # liquidity filter
-    puts = puts[puts["lastPrice"] > 0]
-    puts = puts[puts["strike"].between(0.75 * S0, 1.10 * S0)]  # near-the-money
-    puts = puts[puts["lastPrice"] > puts["strike"].apply(lambda K: max(K - S0, 0))]  # above intrinsic
- 
+    n1 = len(puts)
+    puts = puts.copy()
+    has_quote = (puts["bid"] > 0) & (puts["ask"] > 0)
+    puts["mid"] = np.where(has_quote, (puts["bid"] + puts["ask"]) / 2, puts["lastPrice"])
+    puts = puts[puts["mid"] > 0]
+    n2 = len(puts)
+    puts = puts[puts["strike"].between(0.75 * S0, 1.10 * S0)]
+    n3 = len(puts)
+    puts = puts[puts["mid"] > puts["strike"].apply(lambda K: max(K - S0, 0))]
+    n4 = len(puts)
+    print(f"   Put filter funnel: raw={n0} -> dropna={n1} -> mid>0={n2} -> "
+          f"moneyness={n3} -> above_intrinsic={n4}  (live quote used for "
+          f"{int(has_quote.reindex(puts.index, fill_value=False).sum())} of these)")
+
     # ── Clean calls ──
+    m0 = len(calls)
     calls = calls.dropna(subset=["lastPrice", "impliedVolatility"])
-    calls = calls[calls["volume"] > 10]
-    calls = calls[calls["lastPrice"] > 0]
+    m1 = len(calls)
+    calls = calls.copy()
+    has_quote_c = (calls["bid"] > 0) & (calls["ask"] > 0)
+    calls["mid"] = np.where(has_quote_c, (calls["bid"] + calls["ask"]) / 2, calls["lastPrice"])
+    calls = calls[calls["mid"] > 0]
+    m2 = len(calls)
     calls = calls[calls["strike"].between(0.90 * S0, 1.25 * S0)]
-    calls = calls[calls["lastPrice"] > calls["strike"].apply(lambda K: max(S0 - K, 0))]
+    m3 = len(calls)
+    calls = calls[calls["mid"] > calls["strike"].apply(lambda K: max(S0 - K, 0))]
+    m4 = len(calls)
+    print(f"   Call filter funnel: raw={m0} -> dropna={m1} -> mid>0={m2} -> "
+          f"moneyness={m3} -> above_intrinsic={m4}")
  
     dropped_puts = len(chain.puts) - len(puts)
     dropped_calls = len(chain.calls) - len(calls)
@@ -137,10 +164,10 @@ for exp in chosen_expiries:
     calls = calls.copy()
  
     puts["iv_bisection"] = puts.apply(
-        lambda row: iv_bisection(row["lastPrice"], S0, row["strike"], r, T, "put"), axis=1
+        lambda row: iv_bisection(row["mid"], S0, row["strike"], r, T, "put"), axis=1
     )
     calls["iv_bisection"] = calls.apply(
-        lambda row: iv_bisection(row["lastPrice"], S0, row["strike"], r, T, "call"), axis=1
+        lambda row: iv_bisection(row["mid"], S0, row["strike"], r, T, "call"), axis=1
     )
  
     puts["moneyness"] = puts["strike"] / S0
@@ -154,9 +181,34 @@ for exp in chosen_expiries:
     combined = pd.concat([puts, calls], ignore_index=True)
     combined = combined.dropna(subset=["iv_bisection"])
     combined = combined[combined["iv_bisection"] > 0]
+    combined = combined[combined["iv_bisection"] < 3.0]   # drop pathological solver outputs
+    combined = combined.sort_values("moneyness").reset_index(drop=True)
+
+    # Outlier smoothing: even with liquidity filters, a handful of quotes
+    # can still be stale/mispriced and show up as sharp spikes in the
+    # otherwise smooth skew curve. Drop points whose IV deviates too far
+    # from a rolling local median (computed separately per option_type so
+    # we don't compare puts against calls across the ATM boundary).
+    keep_mask = pd.Series(True, index=combined.index)
+    for opt_type in ("put", "call"):
+        sub = combined[combined["option_type"] == opt_type].sort_values("moneyness")
+        if len(sub) >= 5:
+            rolling_med = sub["iv_bisection"].rolling(5, center=True, min_periods=3).median()
+            deviation = (sub["iv_bisection"] - rolling_med).abs()
+            bad = deviation > 0.05   # more than 5 vol points off the local median
+            keep_mask.loc[sub.index[bad.fillna(False)]] = False
+    n_outliers = (~keep_mask).sum()
+    if n_outliers:
+        print(f"   Smoothing: dropped {n_outliers} contract(s) as local IV outliers "
+              f"(>5 vol pts from rolling median — likely stale/mispriced quotes).")
+    combined = combined[keep_mask].reset_index(drop=True)
  
     print(f"   Rows after IV recovery: {len(combined)}")
+    if combined.empty:
+        print(f"   WARNING: no contracts survived filtering for {exp} — "
+              f"likely thin volume on this expiry/strike range. Skipping in plots.")
     all_results[exp] = combined
+    all_T[exp] = T   # store separately so empty frames don't break downstream T lookups
  
  
 
@@ -171,8 +223,14 @@ fig.suptitle("SPY Implied Vol: Bisection Recovery vs yFinance Reported IV", font
  
 for ax, exp in zip(axes, chosen_expiries):
     df = all_results[exp]
-    T = df["T"].iloc[0]
- 
+    T = all_T[exp]
+
+    if df.empty:
+        ax.set_title(f"Expiry {exp}\n(T={T:.2f}yr) — no contracts passed filters", fontsize=10)
+        ax.text(0.5, 0.5, "No liquid quotes survived filtering",
+                ha="center", va="center", transform=ax.transAxes, fontsize=9, color="grey")
+        continue
+
     puts_df = df[df["option_type"] == "put"].sort_values("moneyness")
     calls_df = df[df["option_type"] == "call"].sort_values("moneyness")
  
@@ -207,8 +265,11 @@ colors_cycle = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
  
 for idx, exp in enumerate(chosen_expiries):
     df = all_results[exp]
+    if df.empty:
+        print(f"   Skipping {exp} in 3D surface plot — no surviving contracts.")
+        continue
     df_sorted = df.sort_values("moneyness")
-    T_val = df_sorted["T"].iloc[0]
+    T_val = all_T[exp]
  
     # Use all options, sorted by moneyness
     xs = df_sorted["moneyness"].values
@@ -245,7 +306,10 @@ print("-" * 60)
  
 for exp in chosen_expiries:
     df = all_results[exp]
-    T_val = df["T"].iloc[0]
+    T_val = all_T[exp]
+    if df.empty:
+        print(f"{exp:<14} {T_val:<8.3f} {'0':<6} {'no data':<18} {'no data'}")
+        continue
     # Near-ATM = moneyness closest to 1.0
     atm_idx = (df["moneyness"] - 1.0).abs().idxmin()
     atm_row = df.loc[atm_idx]
@@ -258,6 +322,5 @@ print("  Dealers short puts must hedge delta by selling spot → demand amplifie
 print("  Skew steepens for short expiries: near-term tail risk is more discrete.")
  
 print("\nDone! Outputs: spy_iv_overlay.png, spy_vol_surface.png")
-
 
 
