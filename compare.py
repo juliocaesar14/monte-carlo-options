@@ -68,8 +68,9 @@ def get_spy_chain_iv(S0: float, r: float, T_target: float) -> pd.DataFrame | Non
     chain = spy.option_chain(best_exp).puts
 
     # Clean: drop low volume, zero bid, NaN last price
-    chain = chain[chain["volume"] > 10].copy()
-    chain = chain[chain["bid"] > 0].copy()
+    chain = chain.copy()
+    chain["volume"] = chain["volume"].fillna(0)
+    chain = chain[chain["bid"] > 0]
     chain = chain.dropna(subset=["lastPrice", "impliedVolatility"])
 
     # Filter to near-the-money
@@ -77,6 +78,11 @@ def get_spy_chain_iv(S0: float, r: float, T_target: float) -> pd.DataFrame | Non
     chain["moneyness"] = chain["strike"] / S0
 
     print(f"[Market] {len(chain)} put contracts after filtering.")
+
+    if chain.empty:
+        print("[WARNING] No market puts survived filtering — market IV will be omitted.")
+        return chain 
+
 
     # Re-derive IV from lastPrice using our bisection
     derived_ivs = []
@@ -137,6 +143,8 @@ def run_comparison():
     # real market IV
     print("Pulling SPY options chain ...")
     market_df = get_spy_chain_iv(S0, r, TARGET_T)
+
+    has_market = market_df is not None and not market_df.empty
 
     # print comparison table
     print("\n" + "=" * 65)
@@ -202,15 +210,6 @@ def run_comparison():
     plt.savefig("vol_smile_comparison.png", dpi=150, bbox_inches="tight")
     print("\nSaved: vol_smile_comparison.png")
     plt.show()
-
-    # key takeway
-    print("\n── Interview talking point ─────────────────────────────────────────")
-    print("GBM prices OTM puts using the same flat vol as ATM options.")
-    print("Heston's negative rho (stock-vol correlation = -0.70) causes variance")
-    print("to spike when prices fall, making OTM puts systematically more expensive.")
-    print("This is the volatility skew — visible in real SPY chains and reproduced")
-    print("by Heston but structurally impossible under constant-vol GBM.")
-    print("────────────────────────────────────────────────────────────────────\n")
 
 
 if __name__ == "__main__":
