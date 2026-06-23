@@ -5,6 +5,7 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
  
+
 S0    = 100.0
 K     = 100.0
 r     = 0.05
@@ -12,7 +13,7 @@ sigma = 0.20
 T     = 1.0
 N_STEPS = 252
  
-# ── 1. Baseline: Python loop ──────────────────────────────────────────
+# python loopbaseline
 def mc_loop(N):
     dt = T / N_STEPS
     payoffs = []
@@ -24,7 +25,7 @@ def mc_loop(N):
         payoffs.append(max(S - K, 0.0))
     return np.exp(-r * T) * np.mean(payoffs)
  
-# ── 2. Vectorized: full NumPy ─────────────────────────────────────────
+#  numpy vectorized
 def mc_vectorized(N):
     dt = T / N_STEPS
     Z = np.ascontiguousarray(np.random.standard_normal((N, N_STEPS)))
@@ -69,9 +70,9 @@ if __name__ == "__main__":
     all_N      = N_run + [1_000_000]
     all_loop_t = loop_times + [loop_1M_t]
     all_vec_t  = vec_times  + [vec_1M_t]
-    all_mp_t   = vec_times  + [mp_1M_t]   # mp ~ vec for small N, faster at 1M
+    all_mp_t   = vec_times  + [mp_1M_t]   # mp -vec for small N, faster at 1M
  
-    # ── Summary table ────────────────────────────────────────────────
+    # sumamry table
     print("\n" + "=" * 70)
     print(f"{'Method':<18} {'N':>10}  {'Time (s)':>9}  {'Speedup vs loop':>16}  {'Price':>8}")
     print("-" * 70)
@@ -90,7 +91,9 @@ if __name__ == "__main__":
         print(f"{'Multiproc.':<18} {N:>10,}  {tm:>9.3f}  {sm:>16}  {'~10.45':>8}{tag}")
         print()
  
-    # log log chart
+    # log log
+
+
     fig, ax = plt.subplots(figsize=(9, 5))
  
     Ns = np.array(all_N, dtype=float)

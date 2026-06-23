@@ -1,7 +1,5 @@
 __pycache__/
 *.pyc
 .env
-*.png
-*.jpg
 .DS_Store
 
